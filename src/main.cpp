@@ -1,74 +1,89 @@
-#include <AccelStepper.h>
-#include "ros.h"
-#include "std_msgs/Float64MultiArray.h"
+#include <Arduino.h>
+#include "AccelStepper.h"
 
-//Defines
-#define MOTOR_NUM 1
+/*
++SF mesajı üzerinden step motor sürülebiliyor (MOTOR_NUM=5 olsa bile).
++Debug amaçlı command'in maplenmiş hali UART'tan bastırılıyor.
 
-//Class Declarations
-AccelStepper myStepper(1,2,3);  //2 -> STEP , 3 -> DIR
- 
-//Function Declarations
-void multiArrToFloatArr(std_msgs::Float64MultiArray given_multi_arr, float*dest_float_arr);
-void scaraCommandCallBack(const std_msgs::Float64MultiArray &scara_command_array);
+-Herhangi bir şekilde feedback verisi basılmıyor.
+-MultiStepper.h'ın entegre edilmesi lazım.
+*/
 
-//Variables
-unsigned long old_time=0;
-std_msgs::Float64MultiArray scara_feedback_array;
-float scara_command_float_arr[MOTOR_NUM];
-std_msgs::Float64MultiArray deneme_array;
+#define BAUD_RATE 9600
 
+#define MOTOR_NUM 5
+#define MAPPING_COEFF 999
+#define ONE_TURN_STEP 1600
 
-//ROS Classes
-ros::NodeHandle nh;
-ros::Publisher scara_feedback_publisher("scara_feedback_topic", &scara_feedback_array);
-ros::Subscriber<std_msgs::Float64MultiArray> scara_command_subscriber("multiarray_topic", scaraCommandCallBack);
+#define MAX_SPEED 10000
+#define DESIRED_SPEED 1000
 
-ros::Publisher deneme_publisher("deneme_topic", &deneme_array);
+AccelStepper stepperOne(1,2,3);  //2 -> STEP , 3 -> DIR
 
-void setup()
-{   
-    nh.initNode();
-    nh.advertise(scara_feedback_publisher);
-    nh.subscribe(scara_command_subscriber);
+void commandReader(void);
+void assignCommandArray(String given_string);
+void mapCommandArray(void);
 
-    nh.advertise(deneme_publisher);
-        
-    scara_feedback_array.data=(float*)malloc(sizeof(float)*MOTOR_NUM);
-    scara_feedback_array.data_length=MOTOR_NUM;
+String command_string;
+float unmapped_command_array[MOTOR_NUM];
+float mapped_command_array[MOTOR_NUM];
 
-    deneme_array.data=(float*)malloc(sizeof(float)*MOTOR_NUM);
-    deneme_array.data_length=MOTOR_NUM;
-
-    myStepper.setMaxSpeed(10000);
+void setup() {
+  Serial.begin(BAUD_RATE);
+  stepperOne.setMaxSpeed(MAX_SPEED);
 }
 
+void loop() {
+  commandReader();
+  stepperOne.moveTo(mapped_command_array[0]);
+  stepperOne.setSpeed(DESIRED_SPEED);
+  stepperOne.runSpeedToPosition();
+}
 
-void loop()
-{   
-    //myStepper.moveTo(3200);    
-    myStepper.moveTo(scara_command_float_arr[0]);
-    myStepper.setSpeed(1000);
-    myStepper.runSpeedToPosition();
-
-    if(millis()-old_time>10){
-        old_time=millis();
-        nh.spinOnce();
-        scara_feedback_array.data[0]=myStepper.currentPosition();
-        scara_feedback_publisher.publish(&scara_feedback_array);
-
-        deneme_publisher.publish(&deneme_array);
+void commandReader(void){
+  static bool receive_flag=false;
+  char inc_char=Serial.read();
+  delay(1);
+  if(Serial.available()>0){
+    if(inc_char=='S'){
+      command_string="";
+      receive_flag=true;
     }
-}
-
-//Function Descriptions
-void multiArrToFloatArr(std_msgs::Float64MultiArray given_multi_arr, float*dest_float_arr){
-    for(int i=0;i<MOTOR_NUM;i++){
-        dest_float_arr[i]=given_multi_arr.data[i];
+    if(receive_flag && inc_char!='S' && inc_char != 'F'){
+      command_string+=inc_char;
     }
+    if(inc_char=='F'){
+      assignCommandArray(command_string);
+      mapCommandArray();
+      Serial.println(mapped_command_array[0]);
+      receive_flag=false;
+      command_string="";
+    }
+  }
 }
 
-void scaraCommandCallBack(const std_msgs::Float64MultiArray &scara_command_array){  
-    deneme_array.data[0]=scara_command_array.data[1]*1600;
-    multiArrToFloatArr(deneme_array, scara_command_float_arr);
+void assignCommandArray(String given_string){
+  String str_buffer;
+  char direction_char;
+  int direction;
+  for(int i=0;i<MOTOR_NUM;i++){
+    direction_char=given_string[4*i];
+    if(direction_char=='0'){
+      direction=-1;
+    }
+    if(direction_char=='1'){
+      direction=1;
+    }
+    for(int j=i*4;j<(i*4)+3;j++){
+      str_buffer+=given_string[j+1];    
+    }
+    unmapped_command_array[i]=direction*str_buffer.toInt();
+    str_buffer="";
+  }
+}
+
+void mapCommandArray(void){
+  for(int i=0;i<MOTOR_NUM;i++){
+    mapped_command_array[i]=unmapped_command_array[i]*ONE_TURN_STEP/MAPPING_COEFF;
+  }
 }
