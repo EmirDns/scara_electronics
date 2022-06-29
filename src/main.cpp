@@ -1,17 +1,18 @@
 #include <Arduino.h>
 #include "AccelStepper.h"
+#include "MultiStepper.h"
 
 /*
 +SF mesajı üzerinden step motor sürülebiliyor (MOTOR_NUM=5 olsa bile).
 +Debug amaçlı command'in maplenmiş hali UART'tan bastırılıyor.
++MultiStepper.h entegre edildi.
 
 -Herhangi bir şekilde feedback verisi basılmıyor.
--MultiStepper.h'ın entegre edilmesi lazım.
 */
 
 #define BAUD_RATE 9600
 
-#define MOTOR_NUM 5
+#define MOTOR_NUM 2
 #define MAPPING_COEFF 999
 #define ONE_TURN_STEP 1600
 
@@ -19,6 +20,8 @@
 #define DESIRED_SPEED 1000
 
 AccelStepper stepperOne(1,2,3);  //2 -> STEP , 3 -> DIR
+AccelStepper stepperTwo(1,4,5);  //4 -> STEP , 5 -> DIR
+MultiStepper scara;
 
 void commandReader(void);
 void assignCommandArray(String given_string);
@@ -28,16 +31,33 @@ String command_string;
 float unmapped_command_array[MOTOR_NUM];
 float mapped_command_array[MOTOR_NUM];
 
+long positions[MOTOR_NUM];
+
 void setup() {
   Serial.begin(BAUD_RATE);
-  stepperOne.setMaxSpeed(MAX_SPEED);
+  stepperOne.setMaxSpeed(DESIRED_SPEED);
+  stepperTwo.setMaxSpeed(DESIRED_SPEED);
+
+  scara.addStepper(stepperOne);
+  scara.addStepper(stepperTwo);
 }
 
 void loop() {
+  //
+  /*
+  positions[0]=3600;
+  positions[1]=-4800;
+  scara.moveTo(positions);
+  scara.runSpeedToPosition();
+  */
+  
   commandReader();
-  stepperOne.moveTo(mapped_command_array[0]);
-  stepperOne.setSpeed(DESIRED_SPEED);
-  stepperOne.runSpeedToPosition();
+  for(int i=0;i<MOTOR_NUM;i++){
+    positions[i]=mapped_command_array[i];
+  }
+  scara.moveTo(positions);
+  scara.runSpeedToPosition();
+  
 }
 
 void commandReader(void){
@@ -56,6 +76,7 @@ void commandReader(void){
       assignCommandArray(command_string);
       mapCommandArray();
       Serial.println(mapped_command_array[0]);
+      Serial.println(mapped_command_array[1]);
       receive_flag=false;
       command_string="";
     }
