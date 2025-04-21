@@ -2,14 +2,6 @@
 #include "AccelStepper.h"
 #include "MultiStepper.h"
 
-/*
-+SF mesajı üzerinden step motor sürülebiliyor (MOTOR_NUM=5 olsa bile).
-+Debug amaçlı command'in maplenmiş hali UART'tan bastırılıyor.
-+MultiStepper.h entegre edildi.
-
--Herhangi bir şekilde feedback verisi basılmıyor.
-*/
-
 #define BAUD_RATE 9600
 
 #define MOTOR_NUM 2
@@ -43,13 +35,6 @@ void setup() {
 }
 
 void loop() {
-  //
-  /*
-  positions[0]=3600;
-  positions[1]=-4800;
-  scara.moveTo(positions);
-  scara.runSpeedToPosition();
-  */
   
   commandReader();
   for(int i=0;i<MOTOR_NUM;i++){
